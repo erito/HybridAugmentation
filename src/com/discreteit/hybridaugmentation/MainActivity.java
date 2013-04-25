@@ -2,9 +2,10 @@ package com.discreteit.hybridaugmentation;
 
 import android.os.Bundle;
 import android.app.Activity;
-import android.util.Log;
 import android.view.Menu;
 import android.widget.Toast;
+import android.widget.ProgressBar;
+import android.view.View;
 import android.os.AsyncTask;
 import org.json.*;
 import com.discreteit.hybridaugmentation.Haversine;
@@ -20,25 +21,22 @@ import android.location.LocationListener;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.LatLng;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 
-/*TODO:  Need to bind the RESTful services query, and as well get a map working, probably Google Maps.
- * after that we'll need to bind the call that updates the location and bearing with the call to get 
- * adjacency.  Then have some indication of adjacency in the view. 
- *
- */
-
+//Where all the magic happens.
 public class MainActivity extends Activity {
 	
 	private GoogleMap map;
+	private MarkerOptions marker;
 	private LocationManager lManager;
 	private ArrayList<AdjacentPoint> adjacentPoints;
+	private ArrayList<AdjacentPoint> currentList;
 	private double currentBearing;
 	private double[] currentLocation;
 	
@@ -48,9 +46,20 @@ public class MainActivity extends Activity {
 		public void onLocationChanged(Location location) {
 			double lat = location.getLatitude();
 			double lon = location.getLongitude();
-			currentLocation = new double[] {lat, lon};
 			currentBearing = location.getBearing();
-			
+			if (lat != currentLocation[0] && lon != currentLocation[1]) {
+				//This probably needs to be updated to reflect a bearing as well
+				//but without documentation I'm pretty lost right now.
+				CameraUpdate cu = CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), (float)currentBearing);
+				map.animateCamera(cu);
+				currentLocation = new double[] {lat, lon};
+				PointStore pointStore = new PointStore();
+				pointStore.execute(currentLocation);			
+			}
+			else {
+				CameraUpdate cu = CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), (float)currentBearing);
+				map.animateCamera(cu);
+			}
 		}
 
 		@Override
@@ -79,10 +88,9 @@ public class MainActivity extends Activity {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
-		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 1, listener);
+		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 4, listener);
 		map = ((MapFragment)getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
-		
 	}
 
 	@Override
@@ -120,7 +128,6 @@ public class MainActivity extends Activity {
 			rp.lat = geometry.getJSONArray("coordinates").getDouble(1);
 			rp.lon = geometry.getJSONArray("coordinates").getDouble(0);
 			rp.googleCoords = new LatLng(rp.lat, rp.lon);
-			
 		}
 		catch (Exception ex) {
 			ex.printStackTrace();
@@ -130,6 +137,7 @@ public class MainActivity extends Activity {
 	}
 	
 	//from current bearing.
+	/*
 	private double getBearing(int offset) {
 		double os = 360 + offset;
 		if (os > 360) {
@@ -141,11 +149,7 @@ public class MainActivity extends Activity {
 		else {
 			return os;
 		}
-	}
-	/* So if thats the case heres what we need:  A radius (always 60 in this case)
-	 * a line from bearing to line of sight.given radius 
-	 * find the distance from the point, determine if its larger than the radius.
-	 */
+	}*/
 	
 	private class AdjacentPoint {
 		public Point point;
@@ -177,7 +181,6 @@ public class MainActivity extends Activity {
 			Vector pointVector = Vector.computeCrossProduct(centralNVector, pointNVector);
 			double theta = Vector.computeTheta(los, pointVector);
 			if (theta < 90 && theta > -90) {
-				//how do I compute distance to LOS?
 				//first compute the distance from the LOS Vector by taking the magnitude
 				//of the pointVector, then we'll compute the distance from origin.
 				Vector losPoint = losNVector.computeCrossProduct(pointNVector);
@@ -196,22 +199,11 @@ public class MainActivity extends Activity {
 		return returnList; 
 	}
 	
-	//TODO:  
-	private void processAdjacency() {
-		if (adjacentPoints.size() > 0) {
-			AdjacentPoint closest = adjacentPoints.get(0);
-			
-		}
-		else {
-			Toast.makeText(getApplicationContext(), "Nothing here", Toast.LENGTH_SHORT).show();
-		}
-	}
-	
-	private class PointStore extends AsyncTask<double[], Integer, JSONObject> {
+	private class PointStore extends AsyncTask<double[], Boolean, JSONObject> {
 		@Override
 		protected JSONObject doInBackground(double[]... latlons) {
-			publishProgress(0);
-			String urlString = "http://192.168.1.148:6555/place";
+			publishProgress(true);
+			String urlString = "http://test.discreteit.com:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				String params = String.format("?lat={0}&lon={1}", Double.toString(latlon[0]), Double.toString(latlon[1]));
@@ -221,7 +213,6 @@ public class MainActivity extends Activity {
 					URL url = new URL(full);
 					conn = (HttpURLConnection) url.openConnection();
 					InputStream stream = conn.getInputStream();
-					publishProgress(50);
 					jobj = new JSONObject(stream.toString());
 					 
 				}
@@ -230,21 +221,26 @@ public class MainActivity extends Activity {
 				
 				}
 			}
-			publishProgress(100);
+			publishProgress(false);
 			return jobj;
 		}
 		
 		@Override
-		protected void onProgressUpdate(Integer... progress) {
-			Log.d("AGRDemo", String.format("{0}% finished", Integer.toString(progress[0])));
+		protected void onProgressUpdate(Boolean... progress) {
+			ProgressBar prog = (ProgressBar)findViewById(R.id.progress);
+			if (progress[0]) {
+				prog.setVisibility(View.VISIBLE);
+			}
+			else {
+				prog.setVisibility(View.INVISIBLE);
+			}
 		}
 		
 		@Override
 		protected void onPostExecute(JSONObject response) {
 			//Here we will need to check if there are any objects, if there are
 			//we'll probably need to order them by location and adjacency to bearing
-			//we'll probably need to notify either the MainControl or do all the checks here and force update the main control from
-			//here....that works for me, personally.
+			//we'll probably need to notify either the MainControl or do all the checks here
 			try {
 				JSONArray features = response.getJSONArray("FeatureCollection");
 				ArrayList<Point> newlist = new ArrayList<Point>();
@@ -253,12 +249,31 @@ public class MainActivity extends Activity {
 					newlist.add(fromJson(entity));
 				}
 				adjacentPoints = AdjacentList(newlist);
-				processAdjacency(); //will update the UI.
+				if (adjacentPoints.size() == 0) {
+					map.clear();
+					Toast.makeText(getApplicationContext(), "Nothing around here", Toast.LENGTH_LONG).show();
+					return;
+				}
+				AdjacentPoint closest = adjacentPoints.get(0);
+				//first we'll check the list, nothing fancy for now this is a prototype.
+				if (closest.equals(currentList.get(0))) {
+					String snippet = String.format("{0} \n You are ~ {1} meters from this place", currentList.get(0).point.description, 
+							Double.toString(currentList.get(0).distanceToOrigin));
+					marker.snippet(snippet);
+					return;
+				}
+				currentList = adjacentPoints;
+				AdjacentPoint ajp = currentList.get(0);
+				String snippet = String.format("{0} \n You are ~ {1} meters from this place", ajp.point.description, Double.toString(ajp.distanceToOrigin));
+				marker.position(ajp.point.googleCoords);
+				marker.snippet(snippet);
+				marker.title(ajp.point.name);
+				map.clear();
+				map.addMarker(marker);
 			}
 			catch (Exception ex){
-				
+				ex.printStackTrace();
 			}
 		}
 	}
-
 }
