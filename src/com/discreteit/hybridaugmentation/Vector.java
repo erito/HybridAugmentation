@@ -36,7 +36,7 @@ public class Vector {
 		double absa = a.getMagnitude();
 		double absb = b.getMagnitude();
 		double dp = Vector.computeDotProduct(a, b);
-		return (dp/(absa*absb));
+		return Math.acos((dp/(absa*absb)));
 	}
 	
 	public Vector() {

@@ -14,6 +14,8 @@ import com.discreteit.hybridaugmentation.NVector;
 
 import android.location.Location;
 import android.location.LocationManager;
+import android.location.LocationProvider;
+
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.GoogleMap;
 import android.content.Context;
@@ -24,7 +26,9 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.LatLng;
 
+import java.io.BufferedReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -37,6 +41,7 @@ public class MainActivity extends Activity {
 	private LocationManager lManager;
 	private ArrayList<AdjacentPoint> adjacentPoints;
 	private ArrayList<AdjacentPoint> currentList;
+	private LocationProvider lProvider;
 	private double currentBearing;
 	private double[] currentLocation;
 	
@@ -47,10 +52,10 @@ public class MainActivity extends Activity {
 			double lat = location.getLatitude();
 			double lon = location.getLongitude();
 			currentBearing = location.getBearing();
-			if (lat != currentLocation[0] && lon != currentLocation[1]) {
+			if (currentLocation == null || (lat != currentLocation[0] && lon != currentLocation[1])) {
 				//This probably needs to be updated to reflect a bearing as well
 				//but without documentation I'm pretty lost right now.
-				CameraUpdate cu = CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), (float)currentBearing);
+				CameraUpdate cu = CameraUpdateFactory.newLatLng(new LatLng(lat, lon));
 				map.animateCamera(cu);
 				currentLocation = new double[] {lat, lon};
 				PointStore pointStore = new PointStore();
@@ -82,15 +87,35 @@ public class MainActivity extends Activity {
 		
 	};
 	
+	@Override
+	protected void onStart() {
+		super.onStart();
+		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
+		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5, listener); 
+	}
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
-		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
-		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 4, listener);
 		map = ((MapFragment)getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
+		map.animateCamera(CameraUpdateFactory.zoomTo(20));
+		
+		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener() {
+			
+			@Override
+			public void onMyLocationChange(Location l) {
+		
+				CameraPosition cp = new CameraPosition.Builder().
+						target(new LatLng(l.getLatitude(), l.getLongitude()))
+						.zoom(20)
+						.bearing(l.getBearing())
+						.tilt(60)
+						.build();
+				map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+			}
+		}); 
 	}
 
 	@Override
@@ -122,8 +147,9 @@ public class MainActivity extends Activity {
 	private Point fromJson(JSONObject obj) {
 		Point rp = new Point();
 		try {
-			rp.name = obj.getString("place");
-			rp.description = obj.getString("description");
+			JSONObject properties = obj.getJSONObject("properties");
+			rp.name = properties.getString("place"); 
+			rp.description = properties.getString("description");
 			JSONObject geometry = obj.getJSONObject("geometry");
 			rp.lat = geometry.getJSONArray("coordinates").getDouble(1);
 			rp.lon = geometry.getJSONArray("coordinates").getDouble(0);
@@ -206,15 +232,22 @@ public class MainActivity extends Activity {
 			String urlString = "http://test.discreteit.com:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
-				String params = String.format("?lat={0}&lon={1}", Double.toString(latlon[0]), Double.toString(latlon[1]));
+				String params = String.format("?lat=%s&lon=%s", Double.toString(latlon[0]), Double.toString(latlon[1]));
 				String full = urlString + params;
 				HttpURLConnection conn;
 				try {
 					URL url = new URL(full);
 					conn = (HttpURLConnection) url.openConnection();
-					InputStream stream = conn.getInputStream();
-					jobj = new JSONObject(stream.toString());
-					 
+					conn.connect();
+					BufferedReader is = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+					String streamline;
+					StringBuilder fullStream = new StringBuilder();
+					while ((streamline = is.readLine()) != null) {
+						fullStream.append(streamline);
+					}
+					is.close();
+					jobj = new JSONObject(fullStream.toString());
+					conn.disconnect();
 				}
 				catch (Exception ex) {
 					ex.printStackTrace();

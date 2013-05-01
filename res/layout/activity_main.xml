@@ -6,10 +6,12 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
-    tools:context=".MainActivity" >
+    tools:context=".MainActivity">
     <ProgressBar 
         android:id="@+id/progress"
         android:indeterminate="true"
+        android:layout_height="match_parent"
+        android:layout_width="match_parent"
         android:layout_alignParentRight="true"
         style="@android:style/Widget.ProgressBar.Large.Inverse"
         />
@@ -19,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         map:mapType="satellite"
-        map:cameraTilt="30"
+        map:cameraTilt="60"
         map:uiTiltGestures="true"
         map:uiCompass="false"
         />

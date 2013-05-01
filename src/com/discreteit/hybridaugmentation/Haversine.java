@@ -1,7 +1,7 @@
 package com.discreteit.hybridaugmentation;
 
 public class Haversine {
-	private static int r = 6371000;
+	private static int r = 6378100;
 	
 	//assumes lat lon order returns distance in meters.
 	public static double computeDistance(double[] xy1, double[] xy2) {
@@ -15,9 +15,12 @@ public class Haversine {
 	//distance traveled in meters, bearing in degrees.
 	public static double[] getPoint(double[] xy, double bearing, double distance) {
 		double radbear = Math.toRadians(bearing);
-		double lat2 = Math.asin(Math.sin(xy[0])*Math.cos(distance/r) + Math.cos(xy[0])*Math.sin(distance/r)*Math.cos(radbear));
-		double lon2 = xy[1] + Math.atan2(Math.sin(radbear)*Math.sin(distance/r)*Math.cos(xy[0]), Math.cos(distance/r)-Math.sin(xy[0])*Math.sin(lat2));
-		return new double[] {lat2,lon2};
+		double rlat1 = Math.toRadians(xy[0]);
+		double rlon1 = Math.toRadians(xy[1]);
+		double lat2 = Math.asin(Math.sin(rlat1)*Math.cos(distance/r) + Math.cos(rlat1)*Math.sin(distance/r)*Math.cos(radbear));
+		double lon2 = rlon1 + Math.atan2(Math.sin(radbear)*Math.sin(distance/r)*Math.cos(rlat1), Math.cos(distance/r)-Math.sin(rlat1)*Math.sin(lat2));
+		lon2 = (lon2 +3*Math.PI) % (2*Math.PI)-Math.PI;
+		return new double[] {Math.toDegrees(lat2),Math.toDegrees(lon2)};
 	}
 	
 	
