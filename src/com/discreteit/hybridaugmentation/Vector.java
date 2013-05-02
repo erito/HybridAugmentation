@@ -25,9 +25,9 @@ public class Vector {
 	
 	public static Vector computeCrossProduct(Vector a, Vector b) {
 		Vector returnVector = new Vector();
-		returnVector.x = a.y*b.z+a.z*b.y;
-		returnVector.y = a.x*b.z+a.z*b.x;
-		returnVector.z = a.x*b.y+a.y*b.x;
+		returnVector.x = a.y*b.z-a.z*b.y;
+		returnVector.y = a.x*b.z-a.z*b.x;
+		returnVector.z = a.x*b.y-a.y*b.x;
 		return returnVector;
 	}
 	
@@ -36,7 +36,8 @@ public class Vector {
 		double absa = a.getMagnitude();
 		double absb = b.getMagnitude();
 		double dp = Vector.computeDotProduct(a, b);
-		return Math.acos((dp/(absa*absb)));
+		double quot = dp/(absa*absb);
+		return Math.acos(quot);
 	}
 	
 	public Vector() {

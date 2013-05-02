@@ -200,12 +200,12 @@ public class MainActivity extends Activity {
 		ArrayList<AdjacentPoint> returnList = new ArrayList<AdjacentPoint>();
 		for (Point p : points) {
 			double dr = Haversine.computeDistance(currentLocation, new double[] {p.lat, p.lon});
-			if (dr > 60) { continue;}
+			if (dr > 60) { continue; }
 			//next lets see if its within the bounds of our semicircle
 			//treating them like vectors
 			NVector pointNVector = new NVector(new double[] {p.lat, p.lon });
 			Vector pointVector = Vector.computeCrossProduct(centralNVector, pointNVector);
-			double theta = Vector.computeTheta(los, pointVector);
+			double theta = Math.toDegrees(Vector.computeTheta(los, pointVector));
 			if (theta < 90 && theta > -90) {
 				//first compute the distance from the LOS Vector by taking the magnitude
 				//of the pointVector, then we'll compute the distance from origin.

@@ -1,7 +1,7 @@
 package com.discreteit.hybridaugmentation;
 
 public class Haversine {
-	private static int r = 6378100;
+	public static int r = 6378100;
 	
 	//assumes lat lon order returns distance in meters.
 	public static double computeDistance(double[] xy1, double[] xy2) {
