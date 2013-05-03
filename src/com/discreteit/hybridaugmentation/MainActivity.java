@@ -91,7 +91,7 @@ public class MainActivity extends Activity {
 	protected void onStart() {
 		super.onStart();
 		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
-		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 5, listener); 
+		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000, 5, listener); 
 	}
 	
 	@Override
@@ -106,7 +106,7 @@ public class MainActivity extends Activity {
 			
 			@Override
 			public void onMyLocationChange(Location l) {
-		
+				//TODO:  Need to change this camera to take into account orientation NOT BEARING!
 				CameraPosition cp = new CameraPosition.Builder().
 						target(new LatLng(l.getLatitude(), l.getLongitude()))
 						.zoom(20)
