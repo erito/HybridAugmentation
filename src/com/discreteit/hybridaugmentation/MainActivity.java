@@ -7,6 +7,7 @@ import android.widget.Toast;
 import android.widget.ProgressBar;
 import android.view.View;
 import android.os.AsyncTask;
+import android.hardware.SensorManager;
 import org.json.*;
 import com.discreteit.hybridaugmentation.Haversine;
 import com.discreteit.hybridaugmentation.Vector;
@@ -161,21 +162,6 @@ public class MainActivity extends Activity {
 		}
 		return rp;
 	}
-	
-	//from current bearing.
-	/*
-	private double getBearing(int offset) {
-		double os = 360 + offset;
-		if (os > 360) {
-			return os -360;
-		}
-		else if (os < 0) {
-			return os + 360;
-		}
-		else {
-			return os;
-		}
-	}*/
 	
 	private class AdjacentPoint {
 		public Point point;
