@@ -1,4 +1,4 @@
 HybridAugmentation
 ==================
 
-Demo of location and bearing based asset awareness based off my neighborhood.
+Demo of location and orientation based asset awareness.
