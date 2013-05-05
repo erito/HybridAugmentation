@@ -7,6 +7,7 @@ import android.widget.Toast;
 import android.widget.ProgressBar;
 import android.view.View;
 import android.os.AsyncTask;
+import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import org.json.*;
 import com.discreteit.hybridaugmentation.Haversine;
@@ -42,6 +43,7 @@ public class MainActivity extends Activity {
 	private LocationManager lManager;
 	private ArrayList<AdjacentPoint> adjacentPoints;
 	private ArrayList<AdjacentPoint> currentList;
+	private SensorManager sensorManager;
 	private LocationProvider lProvider;
 	private double currentBearing;
 	private double[] currentLocation;
@@ -92,7 +94,8 @@ public class MainActivity extends Activity {
 	protected void onStart() {
 		super.onStart();
 		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
-		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000, 5, listener); 
+		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000, 5, listener);
+		sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
 	}
 	
 	@Override
@@ -101,13 +104,17 @@ public class MainActivity extends Activity {
 		setContentView(R.layout.activity_main);
 		map = ((MapFragment)getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
-		map.animateCamera(CameraUpdateFactory.zoomTo(20));
+		map.animateCamera(CameraUpdateFactory.zoomTo(20));		
+		sensorManager.registerListener(listener, sensors)
 		
 		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener() {
 			
 			@Override
 			public void onMyLocationChange(Location l) {
 				//TODO:  Need to change this camera to take into account orientation NOT BEARING!
+				float[] R;//rotation matrix
+				float[] I;
+				sensorManager.getRotationMatrix(R, I, gravity, geomagnetic)
 				CameraPosition cp = new CameraPosition.Builder().
 						target(new LatLng(l.getLatitude(), l.getLongitude()))
 						.zoom(20)
@@ -130,6 +137,10 @@ public class MainActivity extends Activity {
 	protected void onStop() {
 		super.onStop();
 		lManager.removeUpdates(listener);
+	}
+	
+	private SensorListener accelerometerListener () {
+		
 	}
 	
 	private class Point {
