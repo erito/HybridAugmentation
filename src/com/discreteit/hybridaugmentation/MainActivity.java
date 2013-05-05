@@ -8,7 +8,9 @@ import android.widget.ProgressBar;
 import android.view.View;
 import android.os.AsyncTask;
 import android.hardware.Sensor;
+import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
+import android.hardware.SensorEventListener;
 import org.json.*;
 import com.discreteit.hybridaugmentation.Haversine;
 import com.discreteit.hybridaugmentation.Vector;
@@ -16,7 +18,7 @@ import com.discreteit.hybridaugmentation.NVector;
 
 import android.location.Location;
 import android.location.LocationManager;
-import android.location.LocationProvider;
+
 
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.GoogleMap;
@@ -29,14 +31,13 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.io.BufferedReader;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 
 //Where all the magic happens.
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements SensorEventListener {
 	
 	private GoogleMap map;
 	private MarkerOptions marker;
@@ -44,9 +45,13 @@ public class MainActivity extends Activity {
 	private ArrayList<AdjacentPoint> adjacentPoints;
 	private ArrayList<AdjacentPoint> currentList;
 	private SensorManager sensorManager;
-	private LocationProvider lProvider;
-	private double currentBearing;
+	private Sensor accelerometer;
+	private Sensor allAboutTheTeslas; 
+	private double currentYHeading;
+	private float[] currentGravity;
+	private float[] teslaReadings;
 	private double[] currentLocation;
+	private float[] orientation;
 	
 	private final LocationListener listener = new LocationListener () {
 
@@ -54,7 +59,6 @@ public class MainActivity extends Activity {
 		public void onLocationChanged(Location location) {
 			double lat = location.getLatitude();
 			double lon = location.getLongitude();
-			currentBearing = location.getBearing();
 			if (currentLocation == null || (lat != currentLocation[0] && lon != currentLocation[1])) {
 				//This probably needs to be updated to reflect a bearing as well
 				//but without documentation I'm pretty lost right now.
@@ -65,7 +69,7 @@ public class MainActivity extends Activity {
 				pointStore.execute(currentLocation);			
 			}
 			else {
-				CameraUpdate cu = CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), (float)currentBearing);
+				CameraUpdate cu = CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), (float)currentYHeading);
 				map.animateCamera(cu);
 			}
 		}
@@ -93,32 +97,42 @@ public class MainActivity extends Activity {
 	@Override
 	protected void onStart() {
 		super.onStart();
-		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
-		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000, 5, listener);
-		sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
 	}
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
+		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
+		orientation = new float[] {
+			0,
+			0,
+			0
+		};
+		currentGravity = new float[3];
+		teslaReadings = new float[3];
+		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000, 5, listener);
+		sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 		map = ((MapFragment)getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
-		map.animateCamera(CameraUpdateFactory.zoomTo(20));		
-		sensorManager.registerListener(listener, sensors)
+		map.animateCamera(CameraUpdateFactory.zoomTo(20));
+		allAboutTheTeslas = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+		accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+		sensorManager.registerListener(this, allAboutTheTeslas, 200);
+		sensorManager.registerListener(this, accelerometer, 200);
 		
 		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener() {
 			
 			@Override
 			public void onMyLocationChange(Location l) {
-				//TODO:  Need to change this camera to take into account orientation NOT BEARING!
-				float[] R;//rotation matrix
-				float[] I;
-				sensorManager.getRotationMatrix(R, I, gravity, geomagnetic)
+				if (currentGravity != null && teslaReadings != null) {
+					calculateOrientation();
+				}
+				
 				CameraPosition cp = new CameraPosition.Builder().
 						target(new LatLng(l.getLatitude(), l.getLongitude()))
 						.zoom(20)
-						.bearing(l.getBearing())
+						.bearing((float)currentYHeading)
 						.tilt(60)
 						.build();
 				map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
@@ -139,8 +153,29 @@ public class MainActivity extends Activity {
 		lManager.removeUpdates(listener);
 	}
 	
-	private SensorListener accelerometerListener () {
+	@Override
+	public void onAccuracyChanged(Sensor sensor, int accuracy) {
+		// TODO Auto-generated method stub
 		
+	}
+
+	@Override
+	public void onSensorChanged(SensorEvent event) {
+		
+		if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+			System.arraycopy(event.values, 0, currentGravity, 0, event.values.length);
+		}
+		else if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
+			System.arraycopy(event.values, 0, teslaReadings, 0, event.values.length);
+		}
+	}
+	
+	private void calculateOrientation() {
+		float[] R = new float[9];//rotation matrix
+		float[] I = new float[9];
+		SensorManager.getRotationMatrix(R, I, currentGravity, teslaReadings);
+		SensorManager.getOrientation(R, orientation);
+		currentYHeading = Math.toDegrees(orientation[0]);
 	}
 	
 	private class Point {
@@ -188,7 +223,7 @@ public class MainActivity extends Activity {
 	}
 	
 	private ArrayList<AdjacentPoint> AdjacentList(ArrayList<Point> points) {
-		double[] losVertice = Haversine.getPoint(currentLocation, currentBearing, 60);
+		double[] losVertice = Haversine.getPoint(currentLocation, currentYHeading, 60);
 		NVector losNVector = new NVector(losVertice);
 		NVector centralNVector = new NVector(currentLocation);
 		//now we compute the cross product to acquire geometry.
@@ -226,7 +261,7 @@ public class MainActivity extends Activity {
 		@Override
 		protected JSONObject doInBackground(double[]... latlons) {
 			publishProgress(true);
-			String urlString = "http://test.discreteit.com:6555/place";
+			String urlString = "http://192.168.1.148:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				String params = String.format("?lat=%s&lon=%s", Double.toString(latlon[0]), Double.toString(latlon[1]));
