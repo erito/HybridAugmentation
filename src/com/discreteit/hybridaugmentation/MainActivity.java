@@ -3,9 +3,11 @@ package com.discreteit.hybridaugmentation;
 import android.os.Bundle;
 import android.app.Activity;
 import android.view.Menu;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ProgressBar;
 import android.view.View;
+import android.view.LayoutInflater;
 import android.os.AsyncTask;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -18,11 +20,13 @@ import com.discreteit.hybridaugmentation.NVector;
 
 import android.location.Location;
 
+import com.google.android.gms.maps.GoogleMap.InfoWindowAdapter;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.GoogleMap;
 import android.content.Context;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.LatLng;
 
@@ -71,6 +75,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		map = ((MapFragment)getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
 		map.animateCamera(CameraUpdateFactory.zoomTo(20));
+		map.setInfoWindowAdapter(new CustomInfoWindow());
 		allAboutTheTeslas = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 		accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 		sensorManager.registerListener(this, allAboutTheTeslas, 200);
@@ -221,6 +226,27 @@ public class MainActivity extends Activity implements SensorEventListener {
 			}
 		}
 		return returnList; 
+	}
+	
+	private class CustomInfoWindow implements InfoWindowAdapter {
+
+		@Override
+		public View getInfoContents(Marker arg0) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public View getInfoWindow(Marker marker) {
+			LayoutInflater inflater = (LayoutInflater)getApplicationContext().getSystemService(LAYOUT_INFLATER_SERVICE);
+			View v = inflater.inflate(R.layout.callout_view, null);
+			TextView title = (TextView)v.findViewById(R.id.titleText);
+			TextView desc = (TextView)v.findViewById(R.id.description);
+			title.setText(marker.getTitle());
+			desc.setText(marker.getSnippet());
+			return v;
+		}
+		
 	}
 	
 	private class PointStore extends AsyncTask<double[], Boolean, JSONObject> {
