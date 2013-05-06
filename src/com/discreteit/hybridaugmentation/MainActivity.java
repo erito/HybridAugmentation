@@ -17,14 +17,10 @@ import com.discreteit.hybridaugmentation.Vector;
 import com.discreteit.hybridaugmentation.NVector;
 
 import android.location.Location;
-import android.location.LocationManager;
-
 
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.GoogleMap;
 import android.content.Context;
-import android.location.LocationListener;
-import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.MarkerOptions;
@@ -40,59 +36,18 @@ import java.util.ArrayList;
 public class MainActivity extends Activity implements SensorEventListener {
 	
 	private GoogleMap map;
-	private MarkerOptions marker;
-	private LocationManager lManager;
 	private ArrayList<AdjacentPoint> adjacentPoints;
 	private ArrayList<AdjacentPoint> currentList;
 	private SensorManager sensorManager;
 	private Sensor accelerometer;
 	private Sensor allAboutTheTeslas; 
 	private double currentYHeading;
+	private double lastUsedHeading;
+	private Boolean throttleOn;
 	private float[] currentGravity;
 	private float[] teslaReadings;
 	private double[] currentLocation;
 	private float[] orientation;
-	
-	private final LocationListener listener = new LocationListener () {
-
-		@Override
-		public void onLocationChanged(Location location) {
-			double lat = location.getLatitude();
-			double lon = location.getLongitude();
-			if (currentLocation == null || (lat != currentLocation[0] && lon != currentLocation[1])) {
-				//This probably needs to be updated to reflect a bearing as well
-				//but without documentation I'm pretty lost right now.
-				CameraUpdate cu = CameraUpdateFactory.newLatLng(new LatLng(lat, lon));
-				map.animateCamera(cu);
-				currentLocation = new double[] {lat, lon};
-				PointStore pointStore = new PointStore();
-				pointStore.execute(currentLocation);			
-			}
-			else {
-				CameraUpdate cu = CameraUpdateFactory.newLatLngZoom(new LatLng(lat, lon), (float)currentYHeading);
-				map.animateCamera(cu);
-			}
-		}
-
-		@Override
-		public void onProviderDisabled(String provider) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public void onProviderEnabled(String provider) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public void onStatusChanged(String provider, int status, Bundle extras) {
-			// TODO Auto-generated method stub
-			
-		}
-		
-	};
 	
 	@Override
 	protected void onStart() {
@@ -101,15 +56,15 @@ public class MainActivity extends Activity implements SensorEventListener {
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
-		lManager = (LocationManager)this.getSystemService(Context.LOCATION_SERVICE);
 		orientation = new float[] {
 			0,
 			0,
 			0
 		};
+		throttleOn = false;
+		currentList = new ArrayList<AdjacentPoint>();
 		currentGravity = new float[3];
 		teslaReadings = new float[3];
-		lManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000, 5, listener);
 		sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
@@ -120,24 +75,35 @@ public class MainActivity extends Activity implements SensorEventListener {
 		accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 		sensorManager.registerListener(this, allAboutTheTeslas, 200);
 		sensorManager.registerListener(this, accelerometer, 200);
-		
-		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener() {
-			
+
+		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener () {
+
 			@Override
-			public void onMyLocationChange(Location l) {
+			public void onMyLocationChange(Location location) {
+				double lat = location.getLatitude();
+				double lon = location.getLongitude();
 				if (currentGravity != null && teslaReadings != null) {
 					calculateOrientation();
 				}
-				
 				CameraPosition cp = new CameraPosition.Builder().
-						target(new LatLng(l.getLatitude(), l.getLongitude()))
+						target(new LatLng(lat, lon))
 						.zoom(20)
 						.bearing((float)currentYHeading)
 						.tilt(60)
 						.build();
 				map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+				if (currentLocation == null || (Math.abs(currentYHeading) + 30 < Math.abs(lastUsedHeading) || 
+						Math.abs(currentYHeading) - 30 > Math.abs(lastUsedHeading))) {
+					//This probably needs to be updated to reflect a bearing as well
+					//but without documentation I'm pretty lost right now.
+					currentLocation = new double[] {lat, lon};
+					PointStore pointStore = new PointStore();
+					pointStore.execute(currentLocation);		
+				}
+				
 			}
-		}); 
+			
+		});
 	}
 
 	@Override
@@ -150,7 +116,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	@Override
 	protected void onStop() {
 		super.onStop();
-		lManager.removeUpdates(listener);
+
 	}
 	
 	@Override
@@ -260,6 +226,10 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private class PointStore extends AsyncTask<double[], Boolean, JSONObject> {
 		@Override
 		protected JSONObject doInBackground(double[]... latlons) {
+			if (!throttleOn) {
+				throttleOn = true;
+			}
+			else { return null; }
 			publishProgress(true);
 			String urlString = "http://192.168.1.148:6555/place";
 			JSONObject jobj = null;
@@ -306,6 +276,9 @@ public class MainActivity extends Activity implements SensorEventListener {
 			//Here we will need to check if there are any objects, if there are
 			//we'll probably need to order them by location and adjacency to bearing
 			//we'll probably need to notify either the MainControl or do all the checks here
+			if (response == null) {
+				return;
+			}
 			try {
 				JSONArray features = response.getJSONArray("FeatureCollection");
 				ArrayList<Point> newlist = new ArrayList<Point>();
@@ -321,15 +294,17 @@ public class MainActivity extends Activity implements SensorEventListener {
 				}
 				AdjacentPoint closest = adjacentPoints.get(0);
 				//first we'll check the list, nothing fancy for now this is a prototype.
-				if (closest.equals(currentList.get(0))) {
-					String snippet = String.format("{0} \n You are ~ {1} meters from this place", currentList.get(0).point.description, 
+				MarkerOptions marker = new MarkerOptions();
+				if (currentList.size() != 0 && closest.equals(currentList.get(0))) {
+					String snippet = String.format("%s \n You are ~ %s meters from this place", currentList.get(0).point.description, 
 							Double.toString(currentList.get(0).distanceToOrigin));
 					marker.snippet(snippet);
 					return;
 				}
 				currentList = adjacentPoints;
 				AdjacentPoint ajp = currentList.get(0);
-				String snippet = String.format("{0} \n You are ~ {1} meters from this place", ajp.point.description, Double.toString(ajp.distanceToOrigin));
+				String snippet = String.format("%s \n You are ~ %s meters from this place", ajp.point.description, Double.toString(ajp.distanceToOrigin));
+				lastUsedHeading = currentYHeading;
 				marker.position(ajp.point.googleCoords);
 				marker.snippet(snippet);
 				marker.title(ajp.point.name);
@@ -338,6 +313,9 @@ public class MainActivity extends Activity implements SensorEventListener {
 			}
 			catch (Exception ex){
 				ex.printStackTrace();
+			}
+			finally {
+				throttleOn = false;
 			}
 		}
 	}
