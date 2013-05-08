@@ -213,7 +213,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 				//first compute the distance from the LOS Vector by taking the magnitude
 				//of the pointVector, then we'll compute the distance from origin.
 				Vector losPoint = losNVector.computeCrossProduct(pointNVector);
-				AdjacentPoint close = new AdjacentPoint(p, losPoint.getMagnitude(), pointVector.getMagnitude(), theta);
+				AdjacentPoint close = new AdjacentPoint(p, losPoint.getMagnitude(), dr, theta);
 				if (returnList.size() == 0) {
 					returnList.add(close);
 				}
@@ -256,6 +256,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 				throttleOn = true;
 			}
 			else { return null; }
+			lastUsedHeading = currentYHeading;
 			publishProgress(true);
 			String urlString = "http://192.168.1.148:6555/place";
 			JSONObject jobj = null;
@@ -323,14 +324,13 @@ public class MainActivity extends Activity implements SensorEventListener {
 				MarkerOptions marker = new MarkerOptions();
 				if (currentList.size() != 0 && closest.equals(currentList.get(0))) {
 					String snippet = String.format("%s \n You are ~ %s meters from this place", currentList.get(0).point.description, 
-							Double.toString(currentList.get(0).distanceToOrigin));
+							Double.toString(Math.round(currentList.get(0).distanceToOrigin)));
 					marker.snippet(snippet);
 					return;
 				}
 				currentList = adjacentPoints;
 				AdjacentPoint ajp = currentList.get(0);
-				String snippet = String.format("%s \n You are ~ %s meters from this place", ajp.point.description, Double.toString(ajp.distanceToOrigin));
-				lastUsedHeading = currentYHeading;
+				String snippet = String.format("%s \n You are ~ %s meters from this place", ajp.point.description, Double.toString(Math.round(ajp.distanceToOrigin)));
 				marker.position(ajp.point.googleCoords);
 				marker.snippet(snippet);
 				marker.title(ajp.point.name);
