@@ -23,7 +23,6 @@ import android.location.Location;
 import com.google.android.gms.maps.GoogleMap.InfoWindowAdapter;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.GoogleMap;
-import android.content.Context;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.Marker;
@@ -47,11 +46,14 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private Sensor allAboutTheTeslas; 
 	private double currentYHeading;
 	private double lastUsedHeading;
+	private double[] lastUsedLocation;
 	private Boolean throttleOn;
 	private float[] currentGravity;
 	private float[] teslaReadings;
 	private double[] currentLocation;
 	private float[] orientation;
+	private int LOCATION_TOLERANCE = 5;//specified to ensure we don't make too many useless queries, the lower the tolerance the more often we query
+	//the server.
 	
 	@Override
 	protected void onStart() {
@@ -97,13 +99,18 @@ public class MainActivity extends Activity implements SensorEventListener {
 						.tilt(60)
 						.build();
 				map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+				double distance = Haversine.computeDistance(lastUsedLocation, new double[] {lat, lon});
 				if (currentLocation == null || (Math.abs(currentYHeading) + 30 < Math.abs(lastUsedHeading) || 
 						Math.abs(currentYHeading) - 30 > Math.abs(lastUsedHeading))) {
-					//This probably needs to be updated to reflect a bearing as well
-					//but without documentation I'm pretty lost right now.
 					currentLocation = new double[] {lat, lon};
-					PointStore pointStore = new PointStore();
-					pointStore.execute(currentLocation);		
+					//NOTE:
+					if (Math.abs(distance) > LOCATION_TOLERANCE) {
+						PointStore pointStore = new PointStore();
+						pointStore.execute(currentLocation);
+					}
+					else {
+						resortList();
+					}
 				}
 				
 			}
@@ -139,6 +146,28 @@ public class MainActivity extends Activity implements SensorEventListener {
 		else if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
 			System.arraycopy(event.values, 0, teslaReadings, 0, event.values.length);
 		}
+	}
+	
+	//resorts the current list to save a call to the server.
+	private void resortList() {
+		double[] losVertice = Haversine.getPoint(currentLocation, currentYHeading, 60);
+		NVector losNVector = new NVector(losVertice);
+		NVector centralNVector = new NVector(currentLocation);
+		//now we compute the cross product to acquire geometry.
+		Vector los = Vector.computeCrossProduct(centralNVector, losNVector);
+		//Now we can compare the list.
+		ArrayList<AdjacentPoint> returnList = new ArrayList<AdjacentPoint>();
+		for (AdjacentPoint p : currentList) {
+				double dr = Haversine.computeDistance(currentLocation, new double[] {p.point.lat, p.point.lon});
+				//next lets see if its within the bounds of our semicircle
+				//treating them like vectors
+				NVector pointNVector = new NVector(new double[] {p.point.lat, p.point.lon });
+				Vector pointVector = Vector.computeCrossProduct(centralNVector, pointNVector);
+				double theta = Math.toDegrees(Vector.computeTheta(los, pointVector));
+				p.angleFromLOS = theta;
+				p.distanceToOrigin = dr;
+			}
+		//TODO:  Implement median sort algorithm here.
 	}
 	
 	private void calculateOrientation() {
@@ -190,6 +219,15 @@ public class MainActivity extends Activity implements SensorEventListener {
 			distanceToLOS = losdistance;
 			distanceToOrigin = origindistance;
 			angleFromLOS = theta;
+		}
+	}
+	
+	private class ProximityList {
+		public ArrayList<AdjacentPoint> ByDistance;
+		public ArrayList<AdjacentPoint> ByLineOfSight;
+		
+		public ProximityList() {
+			
 		}
 	}
 	
@@ -250,6 +288,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	}
 	
 	private class PointStore extends AsyncTask<double[], Boolean, JSONObject> {
+		
 		@Override
 		protected JSONObject doInBackground(double[]... latlons) {
 			if (!throttleOn) {
@@ -261,6 +300,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 			String urlString = "http://192.168.1.148:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
+				lastUsedLocation = latlon;
 				String params = String.format("?lat=%s&lon=%s", Double.toString(latlon[0]), Double.toString(latlon[1]));
 				String full = urlString + params;
 				HttpURLConnection conn;
