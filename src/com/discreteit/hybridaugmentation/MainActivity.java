@@ -167,7 +167,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 				p.angleFromLOS = theta;
 				p.distanceToOrigin = dr;
 			}
-		//TODO:  Implement median sort algorithm here.
+		//TODO:  Implement On second thought, maybe a heap sort.
 	}
 	
 	private void calculateOrientation() {
