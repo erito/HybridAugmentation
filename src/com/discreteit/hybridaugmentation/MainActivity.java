@@ -39,8 +39,7 @@ import java.util.ArrayList;
 public class MainActivity extends Activity implements SensorEventListener {
 	
 	private GoogleMap map;
-	private ArrayList<AdjacentPoint> adjacentPoints;
-	private ArrayList<AdjacentPoint> currentList;
+	private ProximityList currentList;
 	private SensorManager sensorManager;
 	private Sensor accelerometer;
 	private Sensor allAboutTheTeslas; 
@@ -68,7 +67,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 			0
 		};
 		throttleOn = false;
-		currentList = new ArrayList<AdjacentPoint>();
+		currentList = new ProximityList();
 		currentGravity = new float[3];
 		teslaReadings = new float[3];
 		sensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
@@ -109,7 +108,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 						pointStore.execute(currentLocation);
 					}
 					else {
-						resortList();
+						buildAdjacentList(null);
 					}
 				}
 				
@@ -133,7 +132,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	
 	@Override
 	public void onAccuracyChanged(Sensor sensor, int accuracy) {
-		// TODO Auto-generated method stub
+
 		
 	}
 
@@ -148,28 +147,6 @@ public class MainActivity extends Activity implements SensorEventListener {
 		}
 	}
 	
-	//resorts the current list to save a call to the server.
-	private void resortList() {
-		double[] losVertice = Haversine.getPoint(currentLocation, currentYHeading, 60);
-		NVector losNVector = new NVector(losVertice);
-		NVector centralNVector = new NVector(currentLocation);
-		//now we compute the cross product to acquire geometry.
-		Vector los = Vector.computeCrossProduct(centralNVector, losNVector);
-		//Now we can compare the list.
-		ArrayList<AdjacentPoint> returnList = new ArrayList<AdjacentPoint>();
-		for (AdjacentPoint p : currentList) {
-				double dr = Haversine.computeDistance(currentLocation, new double[] {p.point.lat, p.point.lon});
-				//next lets see if its within the bounds of our semicircle
-				//treating them like vectors
-				NVector pointNVector = new NVector(new double[] {p.point.lat, p.point.lon });
-				Vector pointVector = Vector.computeCrossProduct(centralNVector, pointNVector);
-				double theta = Math.toDegrees(Vector.computeTheta(los, pointVector));
-				p.angleFromLOS = theta;
-				p.distanceToOrigin = dr;
-			}
-		//TODO:  Implement On second thought, maybe a heap sort.
-	}
-	
 	private void calculateOrientation() {
 		float[] R = new float[9];//rotation matrix
 		float[] I = new float[9];
@@ -177,20 +154,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		SensorManager.getOrientation(R, orientation);
 		currentYHeading = Math.toDegrees(orientation[0]);
 	}
-	
-	private class Point {
-		public String description;
-		public LatLng googleCoords;
-		public double lat;
-		public double lon;
-		public String name;
 		
-		public Point() {
-			
-		}
-		
-	}
-	
 	private Point fromJson(JSONObject obj) {
 		Point rp = new Point();
 		try {
@@ -209,36 +173,17 @@ public class MainActivity extends Activity implements SensorEventListener {
 		return rp;
 	}
 	
-	private class AdjacentPoint {
-		public Point point;
-		public double distanceToLOS;
-		public double distanceToOrigin;
-		public double angleFromLOS;
-		public AdjacentPoint(Point p, double losdistance, double origindistance, double theta) {
-			point = p;
-			distanceToLOS = losdistance;
-			distanceToOrigin = origindistance;
-			angleFromLOS = theta;
-		}
-	}
-	
-	private class ProximityList {
-		public ArrayList<AdjacentPoint> ByDistance;
-		public ArrayList<AdjacentPoint> ByLineOfSight;
-		
-		public ProximityList() {
-			
-		}
-	}
-	
-	private ArrayList<AdjacentPoint> AdjacentList(ArrayList<Point> points) {
+	private ProximityList buildAdjacentList(ArrayList<Point> points) {
 		double[] losVertice = Haversine.getPoint(currentLocation, currentYHeading, 60);
 		NVector losNVector = new NVector(losVertice);
 		NVector centralNVector = new NVector(currentLocation);
 		//now we compute the cross product to acquire geometry.
 		Vector los = Vector.computeCrossProduct(centralNVector, losNVector);
 		//Now we can compare the list.
-		ArrayList<AdjacentPoint> returnList = new ArrayList<AdjacentPoint>();
+		ProximityList returnList = new ProximityList();
+		if (points == null) {
+			points = currentList.byDistanceToPoints();
+		}
 		for (Point p : points) {
 			double dr = Haversine.computeDistance(currentLocation, new double[] {p.lat, p.lon});
 			if (dr > 60) { continue; }
@@ -247,20 +192,19 @@ public class MainActivity extends Activity implements SensorEventListener {
 			NVector pointNVector = new NVector(new double[] {p.lat, p.lon });
 			Vector pointVector = Vector.computeCrossProduct(centralNVector, pointNVector);
 			double theta = Math.toDegrees(Vector.computeTheta(los, pointVector));
-			if (theta < 90 && theta > -90) {
-				//first compute the distance from the LOS Vector by taking the magnitude
-				//of the pointVector, then we'll compute the distance from origin.
-				Vector losPoint = losNVector.computeCrossProduct(pointNVector);
-				AdjacentPoint close = new AdjacentPoint(p, losPoint.getMagnitude(), dr, theta);
-				if (returnList.size() == 0) {
-					returnList.add(close);
-				}
-				else if (returnList.get(0).angleFromLOS > close.angleFromLOS) {
-					returnList.add(0, close);
-				}
-				else {
-					returnList.add(close);
-				}
+			//first compute the distance from the LOS Vector by taking the magnitude
+			//of the pointVector, then we'll compute the distance from origin.
+			Vector losPoint = losNVector.computeCrossProduct(pointNVector);
+			AdjacentPoint close = new AdjacentPoint(losPoint.getMagnitude(), dr, theta, p);
+			//From here we do an insertion sort on the proximity list TODO:
+			if (returnList.size() == 0) {
+				returnList.add(close);
+			}
+			else if (returnList.get(0).angleFromLOS > close.angleFromLOS) {
+				returnList.add(0, close);
+			}
+			else {
+				returnList.add(close);
 			}
 		}
 		return returnList; 
@@ -270,7 +214,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
 		@Override
 		public View getInfoContents(Marker arg0) {
-			// TODO Auto-generated method stub
+			
 			return null;
 		}
 
@@ -285,7 +229,65 @@ public class MainActivity extends Activity implements SensorEventListener {
 			return v;
 		}
 		
+	} 
+	
+	private class Point {
+		public String description;
+		public LatLng googleCoords;
+		public double lat;
+		public double lon;
+		public String name;
+		
+		public Point() {
+			
+		}
+		
+		public Point(String desc, LatLng gcoords, double lati, double loni, String nam) {
+			description = desc;
+			googleCoords = gcoords;
+			lat = lati;
+			lon = loni;
+			name = nam;
+		}
+		
 	}
+	
+	private class AdjacentPoint extends Point {
+		public double distanceToLOS;
+		public double distanceToOrigin;
+		public double angleFromLOS;
+		public AdjacentPoint(double losdistance, double origindistance, double theta, Point p) {
+			googleCoords = p.googleCoords;
+			distanceToLOS = losdistance;
+			distanceToOrigin = origindistance;
+			angleFromLOS = theta;
+			name = p.name;
+			description = p.description;
+		}
+	}
+	
+	private class ProximityList {
+		public ArrayList<AdjacentPoint> ByDistance;
+		public ArrayList<AdjacentPoint> ByLineOfSight;
+		
+		public int size() {
+			return ByDistance.size();
+		}
+		
+		public ArrayList<Point> byDistanceToPoints() {
+			ArrayList<Point> returnPoints = new ArrayList<Point>();
+			for (AdjacentPoint ap : this.ByDistance){
+				Point p = new Point(ap.description, ap.googleCoords, ap.lat, ap.lon, ap.name);
+				returnPoints.add(p);
+			}
+			return returnPoints;
+		}
+		
+		public ProximityList() {
+			
+		}
+	}
+
 	
 	private class PointStore extends AsyncTask<double[], Boolean, JSONObject> {
 		
@@ -297,7 +299,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 			else { return null; }
 			lastUsedHeading = currentYHeading;
 			publishProgress(true);
-			String urlString = "http://192.168.1.148:6555/place";
+			String urlString = "http://test.discreteit.com:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				lastUsedLocation = latlon;
@@ -353,27 +355,27 @@ public class MainActivity extends Activity implements SensorEventListener {
 					JSONObject entity = features.getJSONObject(i);
 					newlist.add(fromJson(entity));
 				}
-				adjacentPoints = AdjacentList(newlist);
+				ProximityList adjacentPoints = buildAdjacentList(newlist);
 				if (adjacentPoints.size() == 0) {
 					map.clear();
 					Toast.makeText(getApplicationContext(), "Nothing around here", Toast.LENGTH_LONG).show();
 					return;
 				}
-				AdjacentPoint closest = adjacentPoints.get(0);
+				AdjacentPoint closest = adjacentPoints.ByLineOfSight.get(0); //by los
 				//first we'll check the list, nothing fancy for now this is a prototype.
 				MarkerOptions marker = new MarkerOptions();
-				if (currentList.size() != 0 && closest.equals(currentList.get(0))) {
-					String snippet = String.format("%s \n You are ~ %s meters from this place", currentList.get(0).point.description, 
-							Double.toString(Math.round(currentList.get(0).distanceToOrigin)));
+				if (currentList.size() != 0 && closest.equals(currentList.ByLineOfSight.get(0))) {
+					String snippet = String.format("%s \n You are ~ %s meters from this place", currentList.ByLineOfSight.get(0).description, 
+							Double.toString(Math.round(currentList.ByLineOfSight.get(0).distanceToOrigin)));
 					marker.snippet(snippet);
 					return;
 				}
 				currentList = adjacentPoints;
-				AdjacentPoint ajp = currentList.get(0);
-				String snippet = String.format("%s \n You are ~ %s meters from this place", ajp.point.description, Double.toString(Math.round(ajp.distanceToOrigin)));
-				marker.position(ajp.point.googleCoords);
+				AdjacentPoint ajp = currentList.ByLineOfSight.get(0);
+				String snippet = String.format("%s \n You are ~ %s meters from this place", ajp.description, Double.toString(Math.round(ajp.distanceToOrigin)));
+				marker.position(ajp.googleCoords);
 				marker.snippet(snippet);
-				marker.title(ajp.point.name);
+				marker.title(ajp.name);
 				map.clear();
 				map.addMarker(marker);
 			}
