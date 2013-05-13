@@ -12,6 +12,7 @@ public class Haversine {
 		double distance = c*r;
 		return distance;
 	}
+	
 	//distance traveled in meters, bearing in degrees.
 	public static double[] getPoint(double[] xy, double bearing, double distance) {
 		double radbear = Math.toRadians(bearing);

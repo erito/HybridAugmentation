@@ -35,6 +35,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 
+/*TODO:  
+ * Create list fragment that contains the list of closes points by distance.
+ * create tablet friendly layout.
+ * create web portal for awesomeness.
+ */
+
 //Where all the magic happens.
 public class MainActivity extends Activity implements SensorEventListener {
 	
@@ -42,7 +48,8 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private ProximityList currentList;
 	private SensorManager sensorManager;
 	private Sensor accelerometer;
-	private Sensor allAboutTheTeslas; 
+	private Sensor allAboutTheTeslas;
+	private ProgressBar progressBar;
 	private double currentYHeading;
 	private double lastUsedHeading;
 	private double[] lastUsedLocation;
@@ -53,6 +60,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private float[] orientation;
 	private int LOCATION_TOLERANCE = 5;//specified to ensure we don't make too many useless queries, the lower the tolerance the more often we query
 	//the server.
+	
 	
 	@Override
 	protected void onStart() {
@@ -98,17 +106,17 @@ public class MainActivity extends Activity implements SensorEventListener {
 						.tilt(60)
 						.build();
 				map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
-				double distance = Haversine.computeDistance(lastUsedLocation, new double[] {lat, lon});
 				if (currentLocation == null || (Math.abs(currentYHeading) + 30 < Math.abs(lastUsedHeading) || 
 						Math.abs(currentYHeading) - 30 > Math.abs(lastUsedHeading))) {
 					currentLocation = new double[] {lat, lon};
 					//NOTE:
-					if (Math.abs(distance) > LOCATION_TOLERANCE) {
+					if (lastUsedLocation == null || Math.abs(Haversine.computeDistance(lastUsedLocation, new double[] {lat, lon})) > LOCATION_TOLERANCE) {
 						PointStore pointStore = new PointStore();
 						pointStore.execute(currentLocation);
 					}
 					else {
-						buildAdjacentList(null);
+						currentList = buildAdjacentList(null);
+						placeMarker(currentList.ByLineOfSight.get(0));
 					}
 				}
 				
@@ -121,7 +129,10 @@ public class MainActivity extends Activity implements SensorEventListener {
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// Inflate the menu; this adds items to the action bar if it is present.
 		getMenuInflater().inflate(R.menu.main, menu);
-		return true;
+		progressBar = (ProgressBar)menu.findItem(R.id.progress).getActionView();
+		progressBar.setIndeterminate(true);
+		progressBar.setVisibility(View.INVISIBLE);
+		return super.onCreateOptionsMenu(menu);
 	}
 	
 	@Override
@@ -173,6 +184,17 @@ public class MainActivity extends Activity implements SensorEventListener {
 		return rp;
 	}
 	
+	private void placeMarker(AdjacentPoint point) {
+		//first we'll check the list, nothing fancy for now this is a prototype.
+		MarkerOptions marker = new MarkerOptions();
+		String snippet = String.format("%s \n You are ~ %s meters from this place", point.description, Double.toString(Math.round(point.distanceToOrigin)));
+		marker.position(point.googleCoords);
+		marker.snippet(snippet);
+		marker.title(point.name);
+		map.clear();
+		map.addMarker(marker);
+	}
+	
 	private ProximityList buildAdjacentList(ArrayList<Point> points) {
 		double[] losVertice = Haversine.getPoint(currentLocation, currentYHeading, 60);
 		NVector losNVector = new NVector(losVertice);
@@ -196,15 +218,48 @@ public class MainActivity extends Activity implements SensorEventListener {
 			//of the pointVector, then we'll compute the distance from origin.
 			Vector losPoint = losNVector.computeCrossProduct(pointNVector);
 			AdjacentPoint close = new AdjacentPoint(losPoint.getMagnitude(), dr, theta, p);
-			//From here we do an insertion sort on the proximity list TODO:
-			if (returnList.size() == 0) {
-				returnList.add(close);
+			close.lat = p.lat;
+			close.lon = p.lon;
+			close.googleCoords = p.googleCoords;
+			close.name = p.name;
+			close.description = p.description;
+			//From here we do an insertion sort on the proximity list
+			int k, j;
+			k = j = returnList.size();
+			if (k ==0) {
+				returnList.ByDistance.add(close);
+				returnList.ByLineOfSight.add(close);
+				continue;
 			}
-			else if (returnList.get(0).angleFromLOS > close.angleFromLOS) {
-				returnList.add(0, close);
+			while (k > 0 && returnList.ByDistance.get(k-1).distanceToOrigin > close.distanceToOrigin) {
+				if (k == returnList.size()) {
+					returnList.ByDistance.add(returnList.ByDistance.get(k-1));
+				}
+				else {
+					returnList.ByDistance.set(k, returnList.ByDistance.get(k-1));
+				}
+				k--;
+			}
+			if (k == returnList.size()) {
+				returnList.ByDistance.add(close);	
 			}
 			else {
-				returnList.add(close);
+				returnList.ByDistance.set(k, close);
+			}
+			while (j > 0 && returnList.ByLineOfSight.get(j-1).angleFromLOS > close.angleFromLOS) {
+				if (j == returnList.ByLineOfSight.size()) {
+					returnList.ByLineOfSight.add(returnList.ByLineOfSight.get(j-1));
+				}
+				else {
+					returnList.ByLineOfSight.set(j, returnList.ByLineOfSight.get(j-1));
+				}
+				j--;
+			}
+			if (j == returnList.ByLineOfSight.size()) {
+				returnList.ByLineOfSight.add(close);
+			}
+			else {
+				returnList.ByLineOfSight.set(j, close);
 			}
 		}
 		return returnList; 
@@ -284,7 +339,8 @@ public class MainActivity extends Activity implements SensorEventListener {
 		}
 		
 		public ProximityList() {
-			
+			ByDistance = new ArrayList<AdjacentPoint>();
+			ByLineOfSight = new ArrayList<AdjacentPoint>();
 		}
 	}
 
@@ -331,12 +387,11 @@ public class MainActivity extends Activity implements SensorEventListener {
 		
 		@Override
 		protected void onProgressUpdate(Boolean... progress) {
-			ProgressBar prog = (ProgressBar)findViewById(R.id.progress);
 			if (progress[0]) {
-				prog.setVisibility(View.VISIBLE);
+				progressBar.setVisibility(View.VISIBLE);
 			}
 			else {
-				prog.setVisibility(View.INVISIBLE);
+				progressBar.setVisibility(View.INVISIBLE);
 			}
 		}
 		
@@ -355,29 +410,15 @@ public class MainActivity extends Activity implements SensorEventListener {
 					JSONObject entity = features.getJSONObject(i);
 					newlist.add(fromJson(entity));
 				}
-				ProximityList adjacentPoints = buildAdjacentList(newlist);
-				if (adjacentPoints.size() == 0) {
+				if (features.length() == 0) {
 					map.clear();
 					Toast.makeText(getApplicationContext(), "Nothing around here", Toast.LENGTH_LONG).show();
 					return;
 				}
-				AdjacentPoint closest = adjacentPoints.ByLineOfSight.get(0); //by los
-				//first we'll check the list, nothing fancy for now this is a prototype.
-				MarkerOptions marker = new MarkerOptions();
-				if (currentList.size() != 0 && closest.equals(currentList.ByLineOfSight.get(0))) {
-					String snippet = String.format("%s \n You are ~ %s meters from this place", currentList.ByLineOfSight.get(0).description, 
-							Double.toString(Math.round(currentList.ByLineOfSight.get(0).distanceToOrigin)));
-					marker.snippet(snippet);
-					return;
-				}
+				ProximityList adjacentPoints = buildAdjacentList(newlist);
 				currentList = adjacentPoints;
-				AdjacentPoint ajp = currentList.ByLineOfSight.get(0);
-				String snippet = String.format("%s \n You are ~ %s meters from this place", ajp.description, Double.toString(Math.round(ajp.distanceToOrigin)));
-				marker.position(ajp.googleCoords);
-				marker.snippet(snippet);
-				marker.title(ajp.name);
-				map.clear();
-				map.addMarker(marker);
+				AdjacentPoint closest = adjacentPoints.ByLineOfSight.get(0); //by los
+				placeMarker(closest);
 			}
 			catch (Exception ex){
 				ex.printStackTrace();
