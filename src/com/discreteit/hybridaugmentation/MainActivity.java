@@ -37,6 +37,7 @@ import java.util.ArrayList;
 
 /*TODO:  
  * Create list fragment that contains the list of closes points by distance.
+ * Contain list item click that will generate blue marker and popup.
  * create tablet friendly layout.
  * create web portal for awesomeness.
  */
