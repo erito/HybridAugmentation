@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.view.Menu;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.view.View;
 import android.view.LayoutInflater;
@@ -37,7 +38,7 @@ import java.util.ArrayList;
 
 /*TODO:  
  * Create list fragment that contains the list of closes points by distance.
- * Contain list item click that will generate blue marker and popup.
+ * Contain list item click that will generate blue, green marker and popup.
  * create tablet friendly layout.
  * create web portal for awesomeness.
  */
@@ -51,10 +52,11 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private Sensor accelerometer;
 	private Sensor allAboutTheTeslas;
 	private ProgressBar progressBar;
+	private ListView listView;
 	private double currentYHeading;
 	private double lastUsedHeading;
 	private double[] lastUsedLocation;
-	private Boolean throttleOn;
+	
 	private float[] currentGravity;
 	private float[] teslaReadings;
 	private double[] currentLocation;
@@ -75,7 +77,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 			0,
 			0
 		};
-		throttleOn = false;
+		
 		currentList = new ProximityList();
 		currentGravity = new float[3];
 		teslaReadings = new float[3];
@@ -350,10 +352,6 @@ public class MainActivity extends Activity implements SensorEventListener {
 		
 		@Override
 		protected JSONObject doInBackground(double[]... latlons) {
-			if (!throttleOn) {
-				throttleOn = true;
-			}
-			else { return null; }
 			lastUsedHeading = currentYHeading;
 			publishProgress(true);
 			String urlString = "http://test.discreteit.com:6555/place";
@@ -424,9 +422,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 			catch (Exception ex){
 				ex.printStackTrace();
 			}
-			finally {
-				throttleOn = false;
-			}
+			
 		}
 	}
 }
