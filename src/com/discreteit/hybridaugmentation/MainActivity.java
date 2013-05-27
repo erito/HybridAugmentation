@@ -1,12 +1,12 @@
 package com.discreteit.hybridaugmentation;
 
+import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.app.Activity;
 import android.view.Menu;
-import android.widget.TextView;
-import android.widget.Toast;
-import android.widget.ListView;
-import android.widget.ProgressBar;
+import android.view.ViewGroup;
+import android.widget.*;
 import android.view.View;
 import android.view.LayoutInflater;
 import android.os.AsyncTask;
@@ -53,6 +53,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private Sensor allAboutTheTeslas;
 	private ProgressBar progressBar;
 	private ListView listView;
+    private EntityAdapter entityAdapter;
 	private double currentYHeading;
 	private double lastUsedHeading;
 	private double[] lastUsedLocation;
@@ -90,8 +91,15 @@ public class MainActivity extends Activity implements SensorEventListener {
 		map.setInfoWindowAdapter(new CustomInfoWindow());
 		allAboutTheTeslas = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 		accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-		sensorManager.registerListener(this, allAboutTheTeslas, 200);
-		sensorManager.registerListener(this, accelerometer, 200);
+		sensorManager.registerListener(this, allAboutTheTeslas, 300);
+		sensorManager.registerListener(this, accelerometer, 300);
+        map.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
+
+        //Listview setup stuff
+        listView = (ListView)findViewById(R.id.list);
+        entityAdapter = new EntityAdapter(MainActivity.this);
+        listView.setAdapter(entityAdapter);
+
 
 		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener () {
 
@@ -99,20 +107,20 @@ public class MainActivity extends Activity implements SensorEventListener {
 			public void onMyLocationChange(Location location) {
 				double lat = location.getLatitude();
 				double lon = location.getLongitude();
-				if (currentGravity != null && teslaReadings != null) {
-					calculateOrientation();
-				}
-				CameraPosition cp = new CameraPosition.Builder().
-						target(new LatLng(lat, lon))
-						.zoom(20)
-						.bearing((float)currentYHeading)
-						.tilt(60)
-						.build();
-				map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+                if (teslaReadings != null && currentGravity != null) {
+                    calculateOrientation();
+                }
+                CameraPosition cp = new CameraPosition.Builder().
+                        target(new LatLng(lat, lon))
+                        .zoom(20)
+                        .bearing((float)currentYHeading)
+                        .tilt(60)
+                        .build();
+                map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
 				if (currentLocation == null || (Math.abs(currentYHeading) + 30 < Math.abs(lastUsedHeading) || 
 						Math.abs(currentYHeading) - 30 > Math.abs(lastUsedHeading))) {
 					currentLocation = new double[] {lat, lon};
-					//NOTE:
+
 					if (lastUsedLocation == null || Math.abs(Haversine.computeDistance(lastUsedLocation, new double[] {lat, lon})) > LOCATION_TOLERANCE) {
 						PointStore pointStore = new PointStore();
 						pointStore.execute(currentLocation);
@@ -306,14 +314,16 @@ public class MainActivity extends Activity implements SensorEventListener {
 			lat = lati;
 			lon = loni;
 			name = nam;
+
 		}
 		
 	}
-	
+
 	private class AdjacentPoint extends Point {
 		public double distanceToLOS;
 		public double distanceToOrigin;
 		public double angleFromLOS;
+
 		public AdjacentPoint(double losdistance, double origindistance, double theta, Point p) {
 			googleCoords = p.googleCoords;
 			distanceToLOS = losdistance;
@@ -354,7 +364,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		protected JSONObject doInBackground(double[]... latlons) {
 			lastUsedHeading = currentYHeading;
 			publishProgress(true);
-			String urlString = "http://test.discreteit.com:6555/place";
+			String urlString = "http://192.168.1.148:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				lastUsedLocation = latlon;
@@ -416,6 +426,11 @@ public class MainActivity extends Activity implements SensorEventListener {
 				}
 				ProximityList adjacentPoints = buildAdjacentList(newlist);
 				currentList = adjacentPoints;
+                if (!entityAdapter.isEmpty()) {
+                    entityAdapter.clear();
+                }
+                entityAdapter.addAll(currentList.ByDistance);
+                entityAdapter.notify();
 				AdjacentPoint closest = adjacentPoints.ByLineOfSight.get(0); //by los
 				placeMarker(closest);
 			}
@@ -425,4 +440,33 @@ public class MainActivity extends Activity implements SensorEventListener {
 			
 		}
 	}
+
+    //Used for the listview of images for the expandable grid view.
+    private class EntityAdapter extends ArrayAdapter<AdjacentPoint> {
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            LayoutInflater inflater = (LayoutInflater)this.getContext().getSystemService(this.getContext().LAYOUT_INFLATER_SERVICE);
+            View view = inflater.inflate(R.layout.list_layout, null);
+            AdjacentPoint p = this.getItem(position);
+            TextView labelView = (TextView)view.findViewById(R.id.placeText);
+            labelView.setText(p.name);
+            ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
+            if (p.distanceToOrigin < 5) {
+                imageView.setImageResource(R.drawable.red);
+            }
+            else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
+                imageView.setImageResource(R.drawable.yellow);
+            }
+            else {
+                imageView.setImageResource(R.drawable.green);
+            }
+            return view;
+        }
+
+        public EntityAdapter(Context context) {
+            super(context, R.layout.list_layout);
+        }
+
+    }
 }

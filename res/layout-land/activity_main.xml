@@ -7,16 +7,11 @@
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
     tools:context=".MainActivity">
-    <fragment xmlns:map="http://schemas.android.com/apk/res-auto" 
+    <fragment xmlns:map="http://schemas.android.com/apk/res-auto"
         android:name="com.google.android.gms.maps.MapFragment"  
         android:id="@+id/map"
         android:layout_width="400dp"
         android:layout_height="match_parent"
-        map:mapType="satellite"
-        map:cameraTilt="60"
-        map:uiTiltGestures="true"
-        map:uiCompass="false"
         />
-    
     
 </RelativeLayout>
