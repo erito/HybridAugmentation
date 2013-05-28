@@ -1,7 +1,6 @@
 package com.discreteit.hybridaugmentation;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.app.Activity;
 import android.view.Menu;
@@ -53,6 +52,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private Sensor allAboutTheTeslas;
 	private ProgressBar progressBar;
 	private ListView listView;
+    private LinearLayout listLayout;
     private EntityAdapter entityAdapter;
 	private double currentYHeading;
 	private double lastUsedHeading;
@@ -97,9 +97,11 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         //Listview setup stuff
         listView = (ListView)findViewById(R.id.list);
-        entityAdapter = new EntityAdapter(MainActivity.this);
-        listView.setAdapter(entityAdapter);
-
+        listLayout = (LinearLayout)findViewById(R.id.listLayout);
+        if (listView != null) {
+            entityAdapter = new EntityAdapter(MainActivity.this);
+            listView.setAdapter(entityAdapter);
+        }
 
 		map.setOnMyLocationChangeListener(new GoogleMap.OnMyLocationChangeListener () {
 
@@ -127,7 +129,9 @@ public class MainActivity extends Activity implements SensorEventListener {
 					}
 					else {
 						currentList = buildAdjacentList(null);
-						placeMarker(currentList.ByLineOfSight.get(0));
+                        if (currentList.ByLineOfSight.size() > 0) {
+						    placeMarker(currentList.ByLineOfSight.get(0));
+                        }
 					}
 				}
 				
@@ -205,7 +209,21 @@ public class MainActivity extends Activity implements SensorEventListener {
 		map.clear();
 		map.addMarker(marker);
 	}
-	
+
+    //Method populates list depending on what is present.
+    private void populateList() {
+        if (listView != null) {
+            if (!entityAdapter.isEmpty()) {
+                entityAdapter.clear();
+            }
+            entityAdapter.addAll(currentList.ByDistance);
+            entityAdapter.notify();
+        }
+        else {
+            //TODO:  iterate through ByDistance and inflate views for each.
+        }
+    }
+
 	private ProximityList buildAdjacentList(ArrayList<Point> points) {
 		double[] losVertice = Haversine.getPoint(currentLocation, currentYHeading, 60);
 		NVector losNVector = new NVector(losVertice);
@@ -421,16 +439,12 @@ public class MainActivity extends Activity implements SensorEventListener {
 				}
 				if (features.length() == 0) {
 					map.clear();
-					Toast.makeText(getApplicationContext(), "Nothing around here", Toast.LENGTH_LONG).show();
+					Toast.makeText(MainActivity.this, "Nothing around here", Toast.LENGTH_LONG).show();
 					return;
 				}
 				ProximityList adjacentPoints = buildAdjacentList(newlist);
 				currentList = adjacentPoints;
-                if (!entityAdapter.isEmpty()) {
-                    entityAdapter.clear();
-                }
-                entityAdapter.addAll(currentList.ByDistance);
-                entityAdapter.notify();
+                populateList();
 				AdjacentPoint closest = adjacentPoints.ByLineOfSight.get(0); //by los
 				placeMarker(closest);
 			}
@@ -450,6 +464,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             View view = inflater.inflate(R.layout.list_layout, null);
             AdjacentPoint p = this.getItem(position);
             TextView labelView = (TextView)view.findViewById(R.id.placeText);
+            TextView distText = (TextView)view.findViewById(R.id.distanceText);
             labelView.setText(p.name);
             ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
             if (p.distanceToOrigin < 5) {
@@ -461,6 +476,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             else {
                 imageView.setImageResource(R.drawable.green);
             }
+            distText.setText(Long.toString(Math.round(p.distanceToOrigin)) + " Meters");
             return view;
         }
 
