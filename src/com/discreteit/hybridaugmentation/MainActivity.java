@@ -1,6 +1,7 @@
 package com.discreteit.hybridaugmentation;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.app.Activity;
 import android.view.Menu;
@@ -211,7 +212,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	}
 
     //Method populates list depending on what is present.
-    private void populateList() {
+    private void populateList(Context context) {
         if (listView != null) {
             if (!entityAdapter.isEmpty()) {
                 entityAdapter.clear();
@@ -220,7 +221,38 @@ public class MainActivity extends Activity implements SensorEventListener {
             entityAdapter.notify();
         }
         else {
-            //TODO:  iterate through ByDistance and inflate views for each.
+            if (listLayout.getChildCount() > 0) {
+                listLayout.removeAllViews();
+            }
+            LayoutInflater inflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+            for (AdjacentPoint p : currentList.ByDistance) {
+                View view = inflater.inflate(R.layout.list_layout, null);
+                TextView labelView = (TextView)view.findViewById(R.id.placeText);
+                TextView distText = (TextView)view.findViewById(R.id.distanceText);
+                labelView.setText(p.name);
+                ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
+                if (p.distanceToOrigin < 5) {
+                    imageView.setImageResource(R.drawable.red);
+                }
+                else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
+                    imageView.setImageResource(R.drawable.yellow);
+                }
+                else {
+                    imageView.setImageResource(R.drawable.green);
+                }
+                distText.setText(Long.toString(Math.round(p.distanceToOrigin)) + " Meters");
+                view.setOnClickListener(new View.OnClickListener() {
+
+                    public void onClick(final View v) {
+                        Drawable original = v.getBackground();
+                        v.setBackgroundColor(0xff33b5e5);
+
+                        v.setBackground(original);
+                    }
+
+                });
+                listLayout.addView(view);
+            }
         }
     }
 
@@ -382,7 +414,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		protected JSONObject doInBackground(double[]... latlons) {
 			lastUsedHeading = currentYHeading;
 			publishProgress(true);
-			String urlString = "http://192.168.1.148:6555/place";
+			String urlString = "http://test.discreteit.com:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				lastUsedLocation = latlon;
@@ -405,7 +437,6 @@ public class MainActivity extends Activity implements SensorEventListener {
 				}
 				catch (Exception ex) {
 					ex.printStackTrace();
-				
 				}
 			}
 			publishProgress(false);
@@ -444,7 +475,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 				}
 				ProximityList adjacentPoints = buildAdjacentList(newlist);
 				currentList = adjacentPoints;
-                populateList();
+                populateList(MainActivity.this);
 				AdjacentPoint closest = adjacentPoints.ByLineOfSight.get(0); //by los
 				placeMarker(closest);
 			}
