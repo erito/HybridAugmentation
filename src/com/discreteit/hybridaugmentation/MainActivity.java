@@ -1,6 +1,7 @@
 package com.discreteit.hybridaugmentation;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.app.Activity;
@@ -25,6 +26,7 @@ import com.google.android.gms.maps.GoogleMap.InfoWindowAdapter;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
@@ -207,6 +209,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		marker.position(point.googleCoords);
 		marker.snippet(snippet);
 		marker.title(point.name);
+        marker.icon(BitmapDescriptorFactory.fromResource(R.drawable.red));
 		map.clear();
 		map.addMarker(marker);
 	}
@@ -217,7 +220,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             if (!entityAdapter.isEmpty()) {
                 entityAdapter.clear();
             }
-            entityAdapter.addAll(currentList.ByDistance);
+            entityAdapter.addAll(currentList.ByLineOfSight);
             entityAdapter.notify();
         }
         else {
@@ -225,17 +228,23 @@ public class MainActivity extends Activity implements SensorEventListener {
                 listLayout.removeAllViews();
             }
             LayoutInflater inflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-            for (AdjacentPoint p : currentList.ByDistance) {
+            //keep track of array position.
+            int i = 0;
+            for (AdjacentPoint p : currentList.ByLineOfSight) {
                 View view = inflater.inflate(R.layout.list_layout, null);
                 TextView labelView = (TextView)view.findViewById(R.id.placeText);
                 TextView distText = (TextView)view.findViewById(R.id.distanceText);
+                TextView posIndex = (TextView)view.findViewById(R.id.posIndex);
+                posIndex.setText(Integer.toString(i));
+                i++;
                 labelView.setText(p.name);
                 ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
-                if (p.distanceToOrigin < 5) {
+                if (currentList.ByLineOfSight.get(0) == p) {
                     imageView.setImageResource(R.drawable.red);
                 }
-                else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
+                else if (p.angleFromLOS < 90 && p.angleFromLOS > -90) {
                     imageView.setImageResource(R.drawable.yellow);
+
                 }
                 else {
                     imageView.setImageResource(R.drawable.green);
@@ -246,7 +255,23 @@ public class MainActivity extends Activity implements SensorEventListener {
                     public void onClick(final View v) {
                         Drawable original = v.getBackground();
                         v.setBackgroundColor(0xff33b5e5);
-
+                        MarkerOptions options = new MarkerOptions();
+                        TextView intPos = (TextView)v.findViewById(R.id.posIndex);
+                        int posIndex = Integer.parseInt(intPos.getText().toString());
+                        AdjacentPoint p = currentList.ByLineOfSight.get(posIndex);
+                        String colorText = (String)((TextView)v.findViewById(R.id.color)).getText();
+                        if (colorText == "Yellow") {
+                            options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW));
+                        }
+                        else if (colorText == "Green") {
+                            options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)):
+                        }
+                        String snippet = String.format("%s \n You are ~ %s meters from this place", p.description, Double.toString(Math.round(point.distanceToOrigin)));
+                        options.position(p.googleCoords);
+                        options.snippet(snippet);
+                        options.title(p.name);
+                        Marker theMark = map.addMarker(options);
+                        theMark.showInfoWindow();
                         v.setBackground(original);
                     }
 
@@ -496,16 +521,20 @@ public class MainActivity extends Activity implements SensorEventListener {
             AdjacentPoint p = this.getItem(position);
             TextView labelView = (TextView)view.findViewById(R.id.placeText);
             TextView distText = (TextView)view.findViewById(R.id.distanceText);
+            TextView colorText = (TextView)view.findViewById(R.id.color);
             labelView.setText(p.name);
             ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
             if (p.distanceToOrigin < 5) {
                 imageView.setImageResource(R.drawable.red);
+                colorText.setText("Red");
             }
             else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
                 imageView.setImageResource(R.drawable.yellow);
+                colorText.setText("Yellow");
             }
             else {
                 imageView.setImageResource(R.drawable.green);
+                colorText.setText("Green");
             }
             distText.setText(Long.toString(Math.round(p.distanceToOrigin)) + " Meters");
             return view;
