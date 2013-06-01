@@ -103,6 +103,35 @@ public class MainActivity extends Activity implements SensorEventListener {
         listLayout = (LinearLayout)findViewById(R.id.listLayout);
         if (listView != null) {
             entityAdapter = new EntityAdapter(MainActivity.this);
+            listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                public void onItemClick(AdapterView<?> adapter, View v, int position, long something) {
+                    MarkerOptions options = new MarkerOptions();
+                    TextView intPos = (TextView)v.findViewById(R.id.posIndex);
+                    int posIndex = Integer.parseInt(intPos.getText().toString());
+                    AdjacentPoint p = currentList.ByLineOfSight.get(posIndex);
+                    String colorText = (String)((TextView)v.findViewById(R.id.color)).getText();
+                    if (colorText == "Yellow") {
+                        options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW));
+                    }
+                    else if (colorText == "Green") {
+                        options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
+                    }
+                    String snippet = String.format("%s \n You are ~ %s meters from this place", p.description, Double.toString(Math.round(p.distanceToOrigin)));
+                    options.position(p.googleCoords);
+                    options.snippet(snippet);
+                    options.title(p.name);
+                    Marker theMark = map.addMarker(options);
+                    theMark.showInfoWindow();
+
+                    CameraPosition cp = new CameraPosition.Builder().
+                            target(new LatLng(p.lat, p.lon))
+                            .zoom(20)
+                            .bearing((float)currentYHeading)
+                            .tilt(60)
+                            .build();
+                    map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+                }
+            });
             listView.setAdapter(entityAdapter);
         }
 
@@ -131,6 +160,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 						pointStore.execute(currentLocation);
 					}
 					else {
+                        map.clear();
 						currentList = buildAdjacentList(null);
                         if (currentList.ByLineOfSight.size() > 0) {
 						    placeMarker(currentList.ByLineOfSight.get(0));
@@ -209,7 +239,6 @@ public class MainActivity extends Activity implements SensorEventListener {
 		marker.position(point.googleCoords);
 		marker.snippet(snippet);
 		marker.title(point.name);
-        marker.icon(BitmapDescriptorFactory.fromResource(R.drawable.red));
 		map.clear();
 		map.addMarker(marker);
 	}
@@ -235,19 +264,22 @@ public class MainActivity extends Activity implements SensorEventListener {
                 TextView labelView = (TextView)view.findViewById(R.id.placeText);
                 TextView distText = (TextView)view.findViewById(R.id.distanceText);
                 TextView posIndex = (TextView)view.findViewById(R.id.posIndex);
+                TextView colorText = (TextView)view.findViewById(R.id.color);
                 posIndex.setText(Integer.toString(i));
                 i++;
                 labelView.setText(p.name);
                 ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
-                if (currentList.ByLineOfSight.get(0) == p) {
+                if (p.distanceToOrigin < 5) {
                     imageView.setImageResource(R.drawable.red);
+                    colorText.setText("Red");
                 }
-                else if (p.angleFromLOS < 90 && p.angleFromLOS > -90) {
+                else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
                     imageView.setImageResource(R.drawable.yellow);
-
+                    colorText.setText("Yellow");
                 }
                 else {
                     imageView.setImageResource(R.drawable.green);
+                    colorText.setText("Green");
                 }
                 distText.setText(Long.toString(Math.round(p.distanceToOrigin)) + " Meters");
                 view.setOnClickListener(new View.OnClickListener() {
@@ -264,15 +296,22 @@ public class MainActivity extends Activity implements SensorEventListener {
                             options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW));
                         }
                         else if (colorText == "Green") {
-                            options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)):
+                            options.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
                         }
-                        String snippet = String.format("%s \n You are ~ %s meters from this place", p.description, Double.toString(Math.round(point.distanceToOrigin)));
+                        String snippet = String.format("%s \n You are ~ %s meters from this place", p.description, Double.toString(Math.round(p.distanceToOrigin)));
                         options.position(p.googleCoords);
                         options.snippet(snippet);
                         options.title(p.name);
                         Marker theMark = map.addMarker(options);
                         theMark.showInfoWindow();
                         v.setBackground(original);
+                        CameraPosition cp = new CameraPosition.Builder().
+                                target(new LatLng(p.lat, p.lon))
+                                .zoom(20)
+                                .bearing((float)currentYHeading)
+                                .tilt(60)
+                                .build();
+                        map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
                     }
 
                 });
@@ -439,7 +478,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		protected JSONObject doInBackground(double[]... latlons) {
 			lastUsedHeading = currentYHeading;
 			publishProgress(true);
-			String urlString = "http://test.discreteit.com:6555/place";
+			String urlString = "http://192.168.1.148:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				lastUsedLocation = latlon;
@@ -523,6 +562,8 @@ public class MainActivity extends Activity implements SensorEventListener {
             TextView distText = (TextView)view.findViewById(R.id.distanceText);
             TextView colorText = (TextView)view.findViewById(R.id.color);
             labelView.setText(p.name);
+            TextView posIndex = (TextView)view.findViewById(R.id.posIndex);
+            posIndex.setText(Integer.toString(position));
             ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
             if (p.distanceToOrigin < 5) {
                 imageView.setImageResource(R.drawable.red);
@@ -539,6 +580,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             distText.setText(Long.toString(Math.round(p.distanceToOrigin)) + " Meters");
             return view;
         }
+
 
         public EntityAdapter(Context context) {
             super(context, R.layout.list_layout);
