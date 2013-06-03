@@ -1,12 +1,13 @@
 package com.discreteit.hybridaugmentation;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.app.Activity;
+import android.util.Log;
 import android.view.Menu;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.*;
 import android.view.View;
 import android.view.LayoutInflater;
@@ -56,6 +57,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	private ProgressBar progressBar;
 	private ListView listView;
     private LinearLayout listLayout;
+    private WindowManager windowManager;
     private EntityAdapter entityAdapter;
 	private double currentYHeading;
 	private double lastUsedHeading;
@@ -96,6 +98,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 		sensorManager.registerListener(this, allAboutTheTeslas, 300);
 		sensorManager.registerListener(this, accelerometer, 300);
+        windowManager = (WindowManager)this.getSystemService(WINDOW_SERVICE);
         map.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
 
         //Listview setup stuff
@@ -151,8 +154,8 @@ public class MainActivity extends Activity implements SensorEventListener {
                         .tilt(60)
                         .build();
                 map.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
-				if (currentLocation == null || (Math.abs(currentYHeading) + 30 < Math.abs(lastUsedHeading) || 
-						Math.abs(currentYHeading) - 30 > Math.abs(lastUsedHeading))) {
+				if (currentLocation == null || (Math.abs(currentYHeading) + 15 < Math.abs(lastUsedHeading) ||
+						Math.abs(currentYHeading) - 15 > Math.abs(lastUsedHeading))) {
 					currentLocation = new double[] {lat, lon};
 
 					if (lastUsedLocation == null || Math.abs(Haversine.computeDistance(lastUsedLocation, new double[] {lat, lon})) > LOCATION_TOLERANCE) {
@@ -162,6 +165,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 					else {
                         map.clear();
 						currentList = buildAdjacentList(null);
+                        populateList(MainActivity.this);
                         if (currentList.ByLineOfSight.size() > 0) {
 						    placeMarker(currentList.ByLineOfSight.get(0));
                         }
@@ -211,7 +215,13 @@ public class MainActivity extends Activity implements SensorEventListener {
 		float[] I = new float[9];
 		SensorManager.getRotationMatrix(R, I, currentGravity, teslaReadings);
 		SensorManager.getOrientation(R, orientation);
-		currentYHeading = Math.toDegrees(orientation[0]);
+        int offset = 0;
+        Log.d("com.discreteit.HybridAugmentation", String.format("orientation %s", Double.toString(Math.toDegrees(orientation[0]))));
+        if (windowManager.getDefaultDisplay().getRotation() == 1) {
+            offset += 90;
+        }
+		currentYHeading = Math.toDegrees(orientation[0]) + offset;
+        Log.d("com.discreteit.HybridAugmentation", String.format("orientation %s", Double.toString(currentYHeading)));
 	}
 		
 	private Point fromJson(JSONObject obj) {
@@ -244,7 +254,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 	}
 
     //Method populates list depending on what is present.
-    private void populateList(Context context) {
+    private synchronized void populateList(Context context) {
         if (listView != null) {
             if (!entityAdapter.isEmpty()) {
                 entityAdapter.clear();
@@ -269,11 +279,11 @@ public class MainActivity extends Activity implements SensorEventListener {
                 i++;
                 labelView.setText(p.name);
                 ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
-                if (p.distanceToOrigin < 5) {
+                if (currentList.ByLineOfSight.get(0) == p) {
                     imageView.setImageResource(R.drawable.red);
                     colorText.setText("Red");
                 }
-                else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
+                else if (p.angleFromLOS < 90 && p.angleFromLOS > -90) {
                     imageView.setImageResource(R.drawable.yellow);
                     colorText.setText("Yellow");
                 }
@@ -478,7 +488,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 		protected JSONObject doInBackground(double[]... latlons) {
 			lastUsedHeading = currentYHeading;
 			publishProgress(true);
-			String urlString = "http://192.168.1.148:6555/place";
+			String urlString = "http://test.discreteit.com:6555/place";
 			JSONObject jobj = null;
 			for (double[] latlon : latlons) {
 				lastUsedLocation = latlon;
@@ -565,11 +575,11 @@ public class MainActivity extends Activity implements SensorEventListener {
             TextView posIndex = (TextView)view.findViewById(R.id.posIndex);
             posIndex.setText(Integer.toString(position));
             ImageView imageView = (ImageView)view.findViewById(R.id.iconView);
-            if (p.distanceToOrigin < 5) {
+            if (currentList.ByLineOfSight.get(0) == p) {
                 imageView.setImageResource(R.drawable.red);
                 colorText.setText("Red");
             }
-            else if (p.distanceToOrigin > 5 && p.distanceToOrigin < 15) {
+            else if (p.angleFromLOS < 90 && p.angleFromLOS > -90) {
                 imageView.setImageResource(R.drawable.yellow);
                 colorText.setText("Yellow");
             }
